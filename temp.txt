@@ -1,6 +1,0 @@
-use virtual environment
-    source env/bin/activate
-runserver
-    python3 manage.py runserver
-create an app
-    python3 manage.py startapp app_name 
