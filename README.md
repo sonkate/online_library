@@ -1,7 +1,8 @@
 # online_library
 create .env file
 
-use virtual environment
+use virtual environment:
     source env/bin/activate
-runserver
+    
+runserver:
     python3 manage.py runserver
