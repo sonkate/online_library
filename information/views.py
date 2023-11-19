@@ -1,6 +1,7 @@
 from django.shortcuts import render
 from .connect import users_collection, books_collection
-from bson.objectid import ObjectId
+from django.http import JsonResponse
+import jsonfrom bson.objectid import ObjectId
 from django.http import HttpResponse
 from django.http import JsonResponse
 # Create your views here.
@@ -33,11 +34,29 @@ def home(request):
     # )
     # count = books_collection.count_documents({})
     # print(count)
-    print(request)
-    return render(request, "index.html")
+    count = books_collection.count_documents({})
+    print(count)
+    response = {'data': {'count': count}, 'message': 'successful'}
+    return JsonResponse(response, status=200)
 
 def getBook(request):
     book = books_collection.find_one({'_id': ObjectId('6554763758dd11208593bc60')})
     book['_id'] = str(book['_id'])
     print(book)
     return JsonResponse(book)
+
+def get_book(request):
+    if request.method == 'GET':
+        data = []
+        if request.GET.get('name'):
+            searched = request.GET.get('name')
+            data = books_collection.find({'name': { "$regex": searched}}, {"_id": 0})
+        elif request.GET.get('genre'):
+            searched = request.GET.get('genre')
+            data = books_collection.find({'genre': { "$regex": searched}}, {"_id": 0})
+
+        data_res = []
+        for ele in data:
+            data_res += [ele]
+        response =  {'data': data_res, 'message': 'successful'}
+        return JsonResponse(response, status=200)
