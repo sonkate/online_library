@@ -2,6 +2,6 @@ asgiref==3.7.2
 Django==3.2.23
 dnspython==2.3.0
 pymongo==4.6.0
-python-dotenv==1.0.0
+python-dotenv==0.21.1
 sqlparse==0.4.4
 typing_extensions==4.8.0
