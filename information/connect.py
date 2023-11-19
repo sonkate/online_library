@@ -5,3 +5,4 @@ client = MongoClient(MONGO_URI)
 db = client['sad']
 users_collection = db['users']
 books_collection = db['books']
+borrowed_books = db['borrowing']

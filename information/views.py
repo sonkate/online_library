@@ -1,9 +1,12 @@
 from django.shortcuts import render
-from .connect import users_collection, books_collection
-from django.http import JsonResponse
-import jsonfrom bson.objectid import ObjectId
+from .connect import users_collection, books_collection, borrowed_books
+from bson.objectid import ObjectId
+from datetime import datetime
 from django.http import HttpResponse
 from django.http import JsonResponse
+import json
+
+
 # Create your views here.
 # Home page
 def home(request):
@@ -36,27 +39,63 @@ def home(request):
     # print(count)
     count = books_collection.count_documents({})
     print(count)
-    response = {'data': {'count': count}, 'message': 'successful'}
+    response = {"data": {"count": count}, "message": "successful"}
     return JsonResponse(response, status=200)
 
-def getBook(request):
-    book = books_collection.find_one({'_id': ObjectId('6554763758dd11208593bc60')})
-    book['_id'] = str(book['_id'])
-    print(book)
-    return JsonResponse(book)
+
+def get_book_by_id(request):
+    response = {}
+    print("getting")
+    if request.method == "GET":
+        if request.GET.get("id"):
+            print("id", type(request.GET.get("id")))
+            book = books_collection.find_one({"_id": ObjectId(request.GET.get("id"))})
+            book["_id"] = str(book["_id"])
+            response = {"data": book, "message": "successful"}
+    return JsonResponse(response, status=200)
+
+
+def place_book(request):
+    if request.method == "POST":
+        body = request.body.decode("utf-8")
+        data = json.loads(body)
+
+        userId = data.get('userId')
+        bookId = data.get('bookId')
+        due_date = data.get('due_date')
+        data_row = {
+            "userId": userId,
+            "bookId": bookId,
+            "due_date": due_date,
+            "start_date": datetime.now().isoformat(),
+            "status": "borrowing",
+        }
+        book = books_collection.find_one({"_id": ObjectId(bookId)}) if ObjectId.is_valid(bookId) else None 
+        user = users_collection.find_one({"_id": ObjectId(userId)}) if ObjectId.is_valid(userId) else None
+
+        if user and book:
+            result = borrowed_books.insert_one(data_row)
+        
+            if result.inserted_id:
+                return JsonResponse({'message': 'Book placed successfully'})
+
+        return JsonResponse({'error': 'Failed to insert book placement'}, status=500)
+        
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 def get_book(request):
-    if request.method == 'GET':
+    if request.method == "GET":
         data = []
-        if request.GET.get('name'):
-            searched = request.GET.get('name')
-            data = books_collection.find({'name': { "$regex": searched}}, {"_id": 0})
-        elif request.GET.get('genre'):
-            searched = request.GET.get('genre')
-            data = books_collection.find({'genre': { "$regex": searched}}, {"_id": 0})
+        if request.GET.get("name"):
+            searched = request.GET.get("name")
+            data = books_collection.find({"name": {"$regex": searched}}, {"_id": 0})
+        elif request.GET.get("genre"):
+            searched = request.GET.get("genre")
+            data = books_collection.find({"genre": {"$regex": searched}}, {"_id": 0})
 
         data_res = []
         for ele in data:
             data_res += [ele]
-        response =  {'data': data_res, 'message': 'successful'}
+        response = {"data": data_res, "message": "successful"}
         return JsonResponse(response, status=200)
+
