@@ -6,10 +6,10 @@ create virtual environment:
 
 use virtual environment:
     source env/bin/activate
+    source env/Scripts/activate
 
 install requirements:
     pip install -r requirements
 
-
 runserver:
-    python3 manage.py runserver
+    python manage.py runserver
