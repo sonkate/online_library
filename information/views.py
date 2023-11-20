@@ -92,6 +92,7 @@ def get_book(request):
         elif request.GET.get("genre"):
             searched = request.GET.get("genre")
             data = books_collection.find({"genre": {"$regex": searched}}, {"_id": 0})
+        print(dataa)
 
         data_res = []
         for ele in data:
@@ -99,3 +100,49 @@ def get_book(request):
         response = {"data": data_res, "message": "successful"}
         return JsonResponse(response, status=200)
 
+def sign_up(request):
+    if request.method == "POST":
+        body = request.body.decode("utf-8")
+        data = json.loads(body)
+
+        name = data.get("name")
+        email = data.get("username")
+        lib_code = data.get("code")
+        pwd = data.get("password")
+        phone_num = data.get("phone")
+        avatar = data.get("avatar")
+
+        new_user = {
+            "name": name,
+            "email": email,
+            "lib_code": lib_code,
+            "pwd": pwd,
+            "phone_num": phone_num if phone_num else "",
+            "avatar": avatar if avatar else "",
+        }
+
+        if name and email and lib_code and pwd:
+            result = users_collection.insert_one(new_user)
+
+            if result.inserted_id:
+                return JsonResponse({'message': 'Created account successfully'})
+
+        return JsonResponse({'error': 'Can not create new account'}, status=500)
+        
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+def sign_in(request):
+    if request.method == "POST":
+        body = request.body.decode("utf-8")
+        data = json.loads(body)
+
+        print(data)
+
+        login = users_collection.find_one({"email": data.get("username"), "pwd": data.get("password")})
+
+        if login:
+            return JsonResponse({"user_id": login.get("_id"), "name": login.get("name")})
+
+        return JsonResponse({"error": "Invalid username or password"}, status=500)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
