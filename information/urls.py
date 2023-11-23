@@ -12,4 +12,7 @@ urlpatterns = [
     path("place_book", views.place_book, name = "place_book"),
     path("sign_up", views.sign_up, name = "sign_up"),
     path("sign_in", views.sign_in, name = "sign_in"),
+    path("get_user_info/<str:id>", views.get_user_info, name = "get_user_info"),
+    path("update_user_info", views.update_user_info, name = "update_user_info"),
+    # path("<path:resource>", views.view, name = "view"),
 ]
