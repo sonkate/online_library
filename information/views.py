@@ -55,6 +55,27 @@ def get_book_by_id(request):
             response = {"data": book, "message": "successful"}
     return JsonResponse(response, status=200)
 
+def return_book(request):
+    if request.method == "POST":
+        body = request.body.decode("utf-8")
+        data = json.loads(body)
+
+        userId = data.get('userId')
+        bookId = data.get('bookId')
+        
+        borrowed_book = borrowed_books.find_one({"bookId": bookId, "userId": userId}) if (ObjectId.is_valid(bookId) and ObjectId.is_valid(userId)) else None 
+
+        if borrowed_book and borrowed_book["status"]=='borrowing':
+            result = borrowed_books.update_one({"_id": borrowed_book["_id"]}, { "$set": { "status": "returned" } })
+        
+            if result:
+                # check pelnaty fee
+                day_exceed = (datetime.now().date() - datetime.fromisoformat(borrowed_book["due_date"]).date()).days
+                return JsonResponse({'message': 'Book return successfully.', "data": {'Late days': abs(day_exceed) if day_exceed < 0 else 0}}, status=200)
+
+        return JsonResponse({'error': 'This user does not borrow this book before or Wrong Id'}, status=400)
+        
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 def place_book(request):
     if request.method == "POST":
@@ -63,24 +84,45 @@ def place_book(request):
 
         userId = data.get('userId')
         bookId = data.get('bookId')
-        due_date = data.get('due_date')
+
+        # check date
+        try: 
+            due_date = datetime.strptime(data.get('due_date'), "%Y-%m-%d")
+            due_date = due_date.replace(hour=23, minute=59, second=59)
+
+            due_date_iso_format = due_date.isoformat()
+        except:
+            return JsonResponse({'error': 'Error date time format (Please send under form "Y-m-d" - "2023-12-31")'}, status=400)
+
         data_row = {
             "userId": userId,
             "bookId": bookId,
-            "due_date": due_date,
+            "due_date": due_date_iso_format,
             "start_date": datetime.now().isoformat(),
             "status": "borrowing",
         }
+
         book = books_collection.find_one({"_id": ObjectId(bookId)}) if ObjectId.is_valid(bookId) else None 
         user = users_collection.find_one({"_id": ObjectId(userId)}) if ObjectId.is_valid(userId) else None
 
-        if user and book:
+        borrowed_book = borrowed_books.find_one({"bookId": bookId, "userId": userId})
+
+        # case: the book was not borrowed before
+        if user and book and borrowed_book is None:
             result = borrowed_books.insert_one(data_row)
         
             if result.inserted_id:
                 return JsonResponse({'message': 'Book placed successfully'})
+            
+        # case this book was returned
+        if borrowed_book is not None and borrowed_book['status'] == 'returned': 
+            borrowed_books.update_one({"_id": borrowed_book["_id"]}, { "$set": { "status": "borrowing" } })
+            return JsonResponse({'message': 'Book placed successfully'}, status=200)
+        # case this book is borrowing
+        elif borrowed_books is not None and borrowed_book['status'] == 'borrowing':
+            return JsonResponse({'error': 'This book was borrowed'}, status=409)
 
-        return JsonResponse({'error': 'Failed to insert book placement'}, status=500)
+        return JsonResponse({'error': 'Failed to insert book placement'}, status=409)
         
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
