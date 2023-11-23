@@ -15,5 +15,5 @@ urlpatterns = [
     path("sign_in", views.sign_in, name = "sign_in"),
     path("get_user_info/<str:id>", views.get_user_info, name = "get_user_info"),
     path("update_user_info", views.update_user_info, name = "update_user_info"),
-    # path("<path:resource>", views.view, name = "view"),
+    path("get_borrow_history/<str:id>", views.get_borrow_history, name = "get_borrow_history"),
 ]

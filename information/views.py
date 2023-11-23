@@ -2,7 +2,6 @@ from django.shortcuts import render
 from .connect import users_collection, books_collection, borrowed_books
 from bson.objectid import ObjectId
 from datetime import datetime
-from django.http import HttpResponse
 from django.http import JsonResponse
 from django.http import QueryDict
 import json
@@ -36,20 +35,15 @@ def home(request):
     #         "available": 7,
     #     }
     # )
-    # count = books_collection.count_documents({})
-    # print(count)
     count = books_collection.count_documents({})
-    print(count)
     response = {"data": {"count": count}, "message": "successful"}
     return JsonResponse(response, status=200)
 
 
 def get_book_by_id(request):
     response = {}
-    print("getting")
     if request.method == "GET":
         if request.GET.get("id"):
-            print("id", type(request.GET.get("id")))
             book = books_collection.find_one({"_id": ObjectId(request.GET.get("id"))})
             book["_id"] = str(book["_id"])
             response = {"data": book, "message": "successful"}
@@ -129,19 +123,16 @@ def place_book(request):
 def get_book(request):
     if request.method == "GET":
         data = []
-        if request.GET.get("name"):
-            searched = request.GET.get("name")
-            data = books_collection.find({"name": {"$regex": searched}}, {"_id": 0})
-        elif request.GET.get("genre"):
-            searched = request.GET.get("genre")
-            data = books_collection.find({"genre": {"$regex": searched}}, {"_id": 0})
-        print(data)
+        if request.GET.get("searched"):
+            searched = request.GET.get("searched")
+            data = books_collection.find({"$or":[{"name":  {"$regex":searched}}, {"genre": {"$regex":searched}}]}, {"_id": 0})
 
         data_res = []
         for ele in data:
             data_res += [ele]
         response = {"data": data_res, "message": "successful"}
         return JsonResponse(response, status=200)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 def sign_up(request):
     if request.method == "POST":
@@ -160,8 +151,8 @@ def sign_up(request):
             "avatar": avatar if avatar else "",
         }
 
-        if new_user.name and new_user.email and new_user.lib_code and new_user.pwd:
-            invalid_email = users_collection.find_one({"email": new_user.email})
+        if new_user.get("name") and new_user.get("email") and new_user.get("lib_code") and new_user.get("pwd"):
+            invalid_email = users_collection.find_one({"email": new_user.get("email")})
             if invalid_email:
                 return JsonResponse({"error": "Email has been used"}, status=409)
             
@@ -179,7 +170,7 @@ def sign_in(request):
         body = request.body.decode("utf-8")
         data = json.loads(body)
 
-        login = users_collection.find_one({"email": data.get("username"), "pwd": data.get("password")})
+        login = users_collection.find_one({"email": data.get("email"), "pwd": data.get("password")})
 
         if login:
             return JsonResponse({	
@@ -215,7 +206,6 @@ def update_user_info(request):
     if request.method == "POST":
         body = request.body.decode("utf-8")
         data = json.loads(body)
-        print(data)
 
         name = data.get("name")
         email = data.get("email")
@@ -228,7 +218,7 @@ def update_user_info(request):
             if email != user.get("email"):
                 invalid_email = users_collection.find_one({"email": email})
                 if invalid_email:
-                    return JsonResponse({"error": "Email has been used"}, status=409)
+                    return JsonResponse({"error": "New email has been used"}, status=409)
 				
             change = {"$set": data}
             result = users_collection.update_one(user, change)
@@ -238,4 +228,24 @@ def update_user_info(request):
 		
         return JsonResponse({"error": "Invalid required fields"}, status=404)
 
+    return JsonResponse({"error": "Invalid request method"}, status=405)
+
+def get_borrow_history(request, id):
+    if request.method == "GET":
+        user = users_collection.find_one({"_id": ObjectId(id)})
+        books = []
+
+        if user:
+            records = borrowed_books.find({"userId": id}, {"userId": 0}, limit=10)
+            for record in records:
+                books += [record]
+                name = books_collection.find_one({"_id": ObjectId(str(record.get("bookId")))})
+                books[-1]["_id"] = str(books[-1]["_id"])
+                books[-1]["due_date"] = books[-1]["due_date"][0:10]
+                books[-1]["start_date"] = books[-1]["start_date"][0:10]
+                books[-1]["name"] = name.get("name")
+            return JsonResponse({"message": "History found", "history": books})
+        
+        return JsonResponse({"error": "User not found"}, status=404)
+        
     return JsonResponse({"error": "Invalid request method"}, status=405)
