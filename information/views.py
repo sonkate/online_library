@@ -65,6 +65,8 @@ def return_book(request):
             if result:
                 # check pelnaty fee
                 day_exceed = (datetime.now().date() - datetime.fromisoformat(borrowed_book["due_date"]).date()).days
+                # update number of book available
+                books_collection.update_one({"_id": ObjectId(bookId)}, {'$inc': {'available': 1}})
                 return JsonResponse({'message': 'Book return successfully.', "data": {'Late days': abs(day_exceed) if day_exceed < 0 else 0}}, status=200)
 
         return JsonResponse({'error': 'This user does not borrow this book before or Wrong Id'}, status=400)
@@ -80,7 +82,7 @@ def place_book(request):
         bookId = data.get('bookId')
 
         # check date
-        try: 
+        try:
             due_date = datetime.strptime(data.get('due_date'), "%Y-%m-%d")
             due_date = due_date.replace(hour=23, minute=59, second=59)
 
@@ -96,9 +98,12 @@ def place_book(request):
             "status": "borrowing",
         }
 
-        book = books_collection.find_one({"_id": ObjectId(bookId)}) if ObjectId.is_valid(bookId) else None 
+        book = books_collection.find_one({"_id": ObjectId(bookId)}) if ObjectId.is_valid(bookId) else None
         user = users_collection.find_one({"_id": ObjectId(userId)}) if ObjectId.is_valid(userId) else None
-
+        # Check if book is available
+        if(book.get('available') == 0):
+            return JsonResponse({'error': 'All books are currently borrowed.'}, status=409)
+        
         borrowed_book = borrowed_books.find_one({"bookId": bookId, "userId": userId})
 
         # case: the book was not borrowed before
@@ -106,17 +111,53 @@ def place_book(request):
             result = borrowed_books.insert_one(data_row)
         
             if result.inserted_id:
+                # update number of book available
+                books_collection.update_one({"_id": ObjectId(bookId)}, {'$inc': {'available': -1}})
                 return JsonResponse({'message': 'Book placed successfully'})
             
         # case this book was returned
-        if borrowed_book is not None and borrowed_book['status'] == 'returned': 
+        if borrowed_book is not None and borrowed_book['status'] == 'returned':
             borrowed_books.update_one({"_id": borrowed_book["_id"]}, { "$set": { "status": "borrowing" } })
+            # update number of book available
+            books_collection.update_one({"_id": ObjectId(bookId)}, {'$inc': {'available': -1}})
             return JsonResponse({'message': 'Book placed successfully'}, status=200)
         # case this book is borrowing
         elif borrowed_books is not None and borrowed_book['status'] == 'borrowing':
             return JsonResponse({'error': 'This book was borrowed'}, status=409)
 
         return JsonResponse({'error': 'Failed to insert book placement'}, status=409)
+        
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+def add_book_wishlist(request):
+    if request.method == "POST":
+        body = request.body.decode("utf-8")
+        data = json.loads(body)
+        userId = data.get('userId')
+        bookId = data.get('bookId')
+
+        book = books_collection.find_one({"_id": ObjectId(bookId)}) if ObjectId.is_valid(bookId) else None
+        user = users_collection.find_one({"_id": ObjectId(userId)}) if ObjectId.is_valid(userId) else None
+        if book and user:
+            users_collection.update_one({"_id": ObjectId(userId)}, {'$addToSet': {'wishlist': ObjectId(bookId)}})
+            return JsonResponse({'message': 'Add book to wishlist successfully'}, status=200)
+        return JsonResponse({'error': 'Check userId or bookId'}, status=409)
+        
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+def remove_book_wishlist(request):
+    if request.method == "POST":
+        body = request.body.decode("utf-8")
+        data = json.loads(body)
+        userId = data.get('userId')
+        bookId = data.get('bookId')
+
+        book = books_collection.find_one({"_id": ObjectId(bookId)}) if ObjectId.is_valid(bookId) else None
+        user = users_collection.find_one({"_id": ObjectId(userId)}) if ObjectId.is_valid(userId) else None
+        if book and user:
+            users_collection.update_one({"_id": ObjectId(userId)}, {'$pull': {'wishlist': ObjectId(bookId)}})
+            return JsonResponse({'message': 'Remove book from wishlist successfully'}, status=200)
+        return JsonResponse({'error': 'Check userId or bookId'}, status=409)
         
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
