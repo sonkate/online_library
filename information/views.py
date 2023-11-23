@@ -2,7 +2,6 @@ from django.shortcuts import render
 from .connect import users_collection, books_collection, borrowed_books
 from bson.objectid import ObjectId
 from datetime import datetime
-from django.http import HttpResponse
 from django.http import JsonResponse
 from django.http import QueryDict
 import json
@@ -36,20 +35,15 @@ def home(request):
     #         "available": 7,
     #     }
     # )
-    # count = books_collection.count_documents({})
-    # print(count)
     count = books_collection.count_documents({})
-    print(count)
     response = {"data": {"count": count}, "message": "successful"}
     return JsonResponse(response, status=200)
 
 
 def get_book_by_id(request):
     response = {}
-    print("getting")
     if request.method == "GET":
         if request.GET.get("id"):
-            print("id", type(request.GET.get("id")))
             book = books_collection.find_one({"_id": ObjectId(request.GET.get("id"))})
             book["_id"] = str(book["_id"])
             response = {"data": book, "message": "successful"}
@@ -87,19 +81,16 @@ def place_book(request):
 def get_book(request):
     if request.method == "GET":
         data = []
-        if request.GET.get("name"):
-            searched = request.GET.get("name")
-            data = books_collection.find({"name": {"$regex": searched}}, {"_id": 0})
-        elif request.GET.get("genre"):
-            searched = request.GET.get("genre")
-            data = books_collection.find({"genre": {"$regex": searched}}, {"_id": 0})
-        print(data)
+        if request.GET.get("searched"):
+            searched = request.GET.get("searched")
+            data = books_collection.find({"$or":[{"name":  {"$regex":searched}}, {"genre": {"$regex":searched}}]}, {"_id": 0})
 
         data_res = []
         for ele in data:
             data_res += [ele]
         response = {"data": data_res, "message": "successful"}
         return JsonResponse(response, status=200)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 def sign_up(request):
     if request.method == "POST":
