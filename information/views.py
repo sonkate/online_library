@@ -114,13 +114,9 @@ def place_book(request):
             result = borrowed_books.insert_one(data_row)
         
             if result.inserted_id:
-<<<<<<< HEAD
                 # update number of book available
                 books_collection.update_one({"_id": ObjectId(bookId)}, {'$inc': {'available': -1}})
-                return JsonResponse({'message': 'Book placed successfully'})
-=======
-                return JsonResponse({'message': 'Book placed successfully'}, status=200)
->>>>>>> 6394a72f6220f6b5bd1462f70c4ae747666d512c
+                return JsonResponse({'message': 'Book placed successfully'}, status = 200)
             
         # case this book was returned
         if borrowed_book is not None and borrowed_book['status'] == 'returned':
