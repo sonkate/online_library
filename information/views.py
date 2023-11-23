@@ -45,8 +45,11 @@ def get_book_by_id(request):
     if request.method == "GET":
         if request.GET.get("id"):
             book = books_collection.find_one({"_id": ObjectId(request.GET.get("id"))})
-            book["_id"] = str(book["_id"])
-            response = {"data": book, "message": "successful"}
+            if book:
+                book["_id"] = str(book["_id"])
+                response = {"data": book, "message": "successful"}
+            else: 
+                return JsonResponse({"Error": "No book founded"}, status=400)
     return JsonResponse(response, status=200)
 
 def return_book(request):
@@ -88,7 +91,7 @@ def place_book(request):
 
             due_date_iso_format = due_date.isoformat()
         except:
-            return JsonResponse({'error': 'Error date time format (Please send under form "Y-m-d" - "2023-12-31")'}, status=400)
+            return JsonResponse({'error': 'Error date time format (Please send under form "yyyy-mm-dd" - "2023-12-31")'}, status=400)
 
         data_row = {
             "userId": userId,
@@ -111,9 +114,13 @@ def place_book(request):
             result = borrowed_books.insert_one(data_row)
         
             if result.inserted_id:
+<<<<<<< HEAD
                 # update number of book available
                 books_collection.update_one({"_id": ObjectId(bookId)}, {'$inc': {'available': -1}})
                 return JsonResponse({'message': 'Book placed successfully'})
+=======
+                return JsonResponse({'message': 'Book placed successfully'}, status=200)
+>>>>>>> 6394a72f6220f6b5bd1462f70c4ae747666d512c
             
         # case this book was returned
         if borrowed_book is not None and borrowed_book['status'] == 'returned':
