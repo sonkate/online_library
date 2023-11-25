@@ -2,7 +2,6 @@ from django.shortcuts import render
 from .connect import users_collection, books_collection, borrowed_books
 from bson.objectid import ObjectId
 from datetime import datetime
-from django.http import HttpResponse
 from django.http import JsonResponse
 from django.http import QueryDict
 import json
@@ -36,25 +35,46 @@ def home(request):
     #         "available": 7,
     #     }
     # )
-    # count = books_collection.count_documents({})
-    # print(count)
     count = books_collection.count_documents({})
-    print(count)
     response = {"data": {"count": count}, "message": "successful"}
     return JsonResponse(response, status=200)
 
 
 def get_book_by_id(request):
     response = {}
-    print("getting")
     if request.method == "GET":
         if request.GET.get("id"):
-            print("id", type(request.GET.get("id")))
             book = books_collection.find_one({"_id": ObjectId(request.GET.get("id"))})
-            book["_id"] = str(book["_id"])
-            response = {"data": book, "message": "successful"}
+            if book:
+                book["_id"] = str(book["_id"])
+                response = {"data": book, "message": "successful"}
+            else: 
+                return JsonResponse({"Error": "No book founded"}, status=400)
     return JsonResponse(response, status=200)
 
+def return_book(request):
+    if request.method == "POST":
+        body = request.body.decode("utf-8")
+        data = json.loads(body)
+
+        userId = data.get('userId')
+        bookId = data.get('bookId')
+        
+        borrowed_book = borrowed_books.find_one({"bookId": bookId, "userId": userId}) if (ObjectId.is_valid(bookId) and ObjectId.is_valid(userId)) else None 
+
+        if borrowed_book and borrowed_book["status"]=='borrowing':
+            result = borrowed_books.update_one({"_id": borrowed_book["_id"]}, { "$set": { "status": "returned" } })
+        
+            if result:
+                # check pelnaty fee
+                day_exceed = (datetime.now().date() - datetime.fromisoformat(borrowed_book["due_date"]).date()).days
+                # update number of book available
+                books_collection.update_one({"_id": ObjectId(bookId)}, {'$inc': {'available': 1}})
+                return JsonResponse({'message': 'Book return successfully.', "data": {'Late days': abs(day_exceed) if day_exceed < 0 else 0}}, status=200)
+
+        return JsonResponse({'error': 'This user does not borrow this book before or Wrong Id'}, status=400)
+        
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 def place_book(request):
     if request.method == "POST":
@@ -63,43 +83,100 @@ def place_book(request):
 
         userId = data.get('userId')
         bookId = data.get('bookId')
-        due_date = data.get('due_date')
+
+        # check date
+        try:
+            due_date = datetime.strptime(data.get('due_date'), "%Y-%m-%d")
+            due_date = due_date.replace(hour=23, minute=59, second=59)
+
+            due_date_iso_format = due_date.isoformat()
+        except:
+            return JsonResponse({'error': 'Error date time format (Please send under form "yyyy-mm-dd" - "2023-12-31")'}, status=400)
+
         data_row = {
             "userId": userId,
             "bookId": bookId,
-            "due_date": due_date,
+            "due_date": due_date_iso_format,
             "start_date": datetime.now().isoformat(),
             "status": "borrowing",
         }
-        book = books_collection.find_one({"_id": ObjectId(bookId)}) if ObjectId.is_valid(bookId) else None 
-        user = users_collection.find_one({"_id": ObjectId(userId)}) if ObjectId.is_valid(userId) else None
 
-        if user and book:
+        book = books_collection.find_one({"_id": ObjectId(bookId)}) if ObjectId.is_valid(bookId) else None
+        user = users_collection.find_one({"_id": ObjectId(userId)}) if ObjectId.is_valid(userId) else None
+        # Check if book is available
+        if(book.get('available') == 0):
+            return JsonResponse({'error': 'All books are currently borrowed.'}, status=409)
+        
+        borrowed_book = borrowed_books.find_one({"bookId": bookId, "userId": userId})
+
+        # case: the book was not borrowed before
+        if user and book and borrowed_book is None:
             result = borrowed_books.insert_one(data_row)
         
             if result.inserted_id:
-                return JsonResponse({'message': 'Book placed successfully'})
+                # update number of book available
+                books_collection.update_one({"_id": ObjectId(bookId)}, {'$inc': {'available': -1}})
+                return JsonResponse({'message': 'Book placed successfully'}, status = 200)
+            
+        # case this book was returned
+        if borrowed_book is not None and borrowed_book['status'] == 'returned':
+            borrowed_books.update_one({"_id": borrowed_book["_id"]}, { "$set": { "status": "borrowing" } })
+            # update number of book available
+            books_collection.update_one({"_id": ObjectId(bookId)}, {'$inc': {'available': -1}})
+            return JsonResponse({'message': 'Book placed successfully'}, status=200)
+        # case this book is borrowing
+        elif borrowed_books is not None and borrowed_book['status'] == 'borrowing':
+            return JsonResponse({'error': 'This book was borrowed'}, status=409)
 
-        return JsonResponse({'error': 'Failed to insert book placement'}, status=500)
+        return JsonResponse({'error': 'Failed to insert book placement'}, status=409)
+        
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+def add_book_wishlist(request):
+    if request.method == "POST":
+        body = request.body.decode("utf-8")
+        data = json.loads(body)
+        userId = data.get('userId')
+        bookId = data.get('bookId')
+
+        book = books_collection.find_one({"_id": ObjectId(bookId)}) if ObjectId.is_valid(bookId) else None
+        user = users_collection.find_one({"_id": ObjectId(userId)}) if ObjectId.is_valid(userId) else None
+        if book and user:
+            users_collection.update_one({"_id": ObjectId(userId)}, {'$addToSet': {'wishlist': ObjectId(bookId)}})
+            return JsonResponse({'message': 'Add book to wishlist successfully'}, status=200)
+        return JsonResponse({'error': 'Check userId or bookId'}, status=409)
+        
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+def remove_book_wishlist(request):
+    if request.method == "POST":
+        body = request.body.decode("utf-8")
+        data = json.loads(body)
+        userId = data.get('userId')
+        bookId = data.get('bookId')
+
+        book = books_collection.find_one({"_id": ObjectId(bookId)}) if ObjectId.is_valid(bookId) else None
+        user = users_collection.find_one({"_id": ObjectId(userId)}) if ObjectId.is_valid(userId) else None
+        if book and user:
+            users_collection.update_one({"_id": ObjectId(userId)}, {'$pull': {'wishlist': ObjectId(bookId)}})
+            return JsonResponse({'message': 'Remove book from wishlist successfully'}, status=200)
+        return JsonResponse({'error': 'Check userId or bookId'}, status=409)
         
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 def get_book(request):
     if request.method == "GET":
         data = []
-        if request.GET.get("name"):
-            searched = request.GET.get("name")
-            data = books_collection.find({"name": {"$regex": searched}}, {"_id": 0})
-        elif request.GET.get("genre"):
-            searched = request.GET.get("genre")
-            data = books_collection.find({"genre": {"$regex": searched}}, {"_id": 0})
-        print(data)
+        if request.GET.get("searched"):
+            searched = request.GET.get("searched")
+            data = books_collection.find({"$or":[{"name":  {"$regex":searched}}, {"genre": {"$regex":searched}}]}, {"_id": 0})
 
         data_res = []
         for ele in data:
             data_res += [ele]
         response = {"data": data_res, "message": "successful"}
         return JsonResponse(response, status=200)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 def sign_up(request):
     if request.method == "POST":
