@@ -211,6 +211,7 @@ def sign_up(request):
     return JsonResponse({"error": "Invalid request method"}, status=405)
 
 def sign_in(request):
+    print(request)
     if request.method == "POST":
         body = request.body.decode("utf-8")
         data = json.loads(body)
