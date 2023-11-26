@@ -170,7 +170,8 @@ def get_book(request):
         if request.GET.get("searched"):
             searched = request.GET.get("searched")
             data = books_collection.find({"$or":[{"name":  {"$regex":searched}}, {"genre": {"$regex":searched}}]}, {"_id": 0})
-
+        else:
+            data = books_collection.find({},{"_id":0})
         data_res = []
         for ele in data:
             data_res += [ele]
