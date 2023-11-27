@@ -267,10 +267,11 @@ def update_user_info(request):
                 invalid_email = users_collection.find_one({"email": email})
                 if invalid_email:
                     return JsonResponse({"error": "New email has been used"}, status=409)
-				
+            data.pop("id")
+            data["pwd"] = data.pop("password")
             change = {"$set": data}
             result = users_collection.update_one(user, change)
-
+            
             if result:
                 return JsonResponse({"message": "Updated successfully"})
 		
