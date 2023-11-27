@@ -1,6 +1,7 @@
 from django.shortcuts import render
 from .connect import users_collection, books_collection, borrowed_books
 from bson.objectid import ObjectId
+from bson import json_util
 from datetime import datetime
 from django.http import JsonResponse
 from django.http import QueryDict
@@ -169,9 +170,10 @@ def get_book(request):
         data = []
         if request.GET.get("searched"):
             searched = request.GET.get("searched")
-            data = books_collection.find({"$or":[{"name":  {"$regex":searched}}, {"genre": {"$regex":searched}}]}, {"_id": 0})
+            data = books_collection.find({"$or":[{"name":  {"$regex":searched}}, {"genre": {"$regex":searched}}]})
         else:
-            data = books_collection.find({},{"_id":0})
+            data = books_collection.find({})
+        data = json.loads(json_util.dumps(data))
         data_res = []
         for ele in data:
             data_res += [ele]
