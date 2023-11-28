@@ -121,7 +121,7 @@ def place_book(request):
             
         # case this book was returned
         if borrowed_book is not None and borrowed_book['status'] == 'returned':
-            borrowed_books.update_one({"_id": borrowed_book["_id"]}, { "$set": { "status": "borrowing" } })
+            borrowed_books.update_one({"_id": borrowed_book["_id"]}, { "$set": { "status": "borrowing","due_date": due_date_iso_format, "start_date": datetime.now().isoformat(),  } })
             # update number of book available
             books_collection.update_one({"_id": ObjectId(bookId)}, {'$inc': {'available': -1}})
             return JsonResponse({'message': 'Book placed successfully'}, status=200)
@@ -180,6 +180,49 @@ def get_book(request):
         response = {"data": data_res, "message": "successful"}
         return JsonResponse(response, status=200)
     return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+def get_placed_list(request, id):
+    if request.method == "GET":
+        # case: check valid userId
+        if not ObjectId.is_valid(id):
+            return JsonResponse({'error': 'Wrong Id'}, status=409)
+        user = users_collection.find_one({"_id" : ObjectId(id)})
+
+        # case: check existed user
+        if user:
+            data = borrowed_books.find({"userId" : id})
+            placed_books = json.loads(json_util.dumps(data))
+
+            # case: no book borrowed before
+            if len(list(placed_books))==0:
+                return JsonResponse({'data': '' ,'message': 'Placed list is empty'}, status=200)
+            
+            # case: normal list
+            data = books_collection.find({"$or": [{'_id': ObjectId(item['bookId'])} for item in placed_books]})
+            matching_books = json.loads(json_util.dumps(data))
+            for book in matching_books:
+                book['id'] = str(book['_id']['$oid'])
+                del book['_id']
+
+            combined_list = []
+            for item in placed_books:
+                book_id = item['bookId']
+                matching_book = next((book for book in matching_books if book['id'] == book_id), None)
+                if matching_book:
+                    del item['userId']
+                    del item['_id']
+                    del item['bookId']
+                    item.update(matching_book)
+                    combined_list.append(item)
+
+            return JsonResponse({'data': combined_list ,'message': 'test'}, status=200)
+
+        else:
+            return JsonResponse({'error': 'User id is not exist'}, status=409)
+    else:
+        return JsonResponse({'error': 'Invalid request method'}, status=405)
+            
+
 def get_wishlist(request, id):
     if request.method == "GET":
         if not ObjectId.is_valid(id):
