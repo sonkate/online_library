@@ -183,7 +183,7 @@ def get_book(request):
 def get_wishlist(request, id):
     if request.method == "GET":
         if not ObjectId.is_valid(id):
-            return JsonResponse({'error': 'Wrong Id'}, status=400)
+            return JsonResponse({'error': 'Wrong Id'}, status=409)
         user = users_collection.find_one({"_id" : ObjectId(id)})
         if user:
             data = json.loads(json_util.dumps(user))
@@ -196,7 +196,10 @@ def get_wishlist(request, id):
             for ele in data:
                 data_res += [ele]
             return JsonResponse({'data':data_res ,'message': 'Get wishlist successfully'}, status=200)
-    return JsonResponse({'error': 'Invalid request method'}, status=405)
+        else:
+            return JsonResponse({'error': 'User id is not exist'}, status=409)
+    else:
+        return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 def sign_up(request):
     if request.method == "POST":
