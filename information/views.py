@@ -180,6 +180,23 @@ def get_book(request):
         response = {"data": data_res, "message": "successful"}
         return JsonResponse(response, status=200)
     return JsonResponse({'error': 'Invalid request method'}, status=405)
+def get_wishlist(request, id):
+    if request.method == "GET":
+        if not ObjectId.is_valid(id):
+            return JsonResponse({'error': 'Wrong Id'}, status=400)
+        user = users_collection.find_one({"_id" : ObjectId(id)})
+        if user:
+            data = json.loads(json_util.dumps(user))
+            wishlist = data['wishlist'] if 'wishlist' in data else []
+            if len(wishlist) == 0:
+                return JsonResponse({'data': wishlist ,'message': 'Wishlist is empty'}, status=200)
+            data = books_collection.find({"$or": [{'_id': ObjectId(item['$oid'])} for item in wishlist]})
+            data = json.loads(json_util.dumps(data))
+            data_res = []
+            for ele in data:
+                data_res += [ele]
+            return JsonResponse({'data':data_res ,'message': 'Get wishlist successfully'}, status=200)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 def sign_up(request):
     if request.method == "POST":
