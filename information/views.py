@@ -216,7 +216,10 @@ def get_placed_list(request, id):
                     combined_list.append(item)
             data = [item for item in combined_list if item['status'] == 'borrowing']
 
-            return JsonResponse({'data': combined_list ,'message': 'success'}, status=200)
+            #check final length of data after being eliminated 
+            if len(data) == 0:
+                return JsonResponse({'data': '' ,'message': 'Placed list is empty'}, status=200)
+            return JsonResponse({'data': data ,'message': 'success'}, status=200)
 
         else:
             return JsonResponse({'error': 'User id is not exist'}, status=409)
