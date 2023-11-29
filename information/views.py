@@ -216,10 +216,7 @@ def get_placed_list(request, id):
                     combined_list.append(item)
             data = [item for item in combined_list if item['status'] == 'borrowing']
 
-            #check final length of data after being eliminated 
-            if len(data) == 0:
-                return JsonResponse({'data': '' ,'message': 'Placed list is empty'}, status=200)
-            return JsonResponse({'data': data ,'message': 'successful'}, status=200)
+            return JsonResponse({'data': combined_list ,'message': 'success'}, status=200)
 
         else:
             return JsonResponse({'error': 'User id is not exist'}, status=409)
@@ -322,27 +319,39 @@ def update_user_info(request):
         body = request.body.decode("utf-8")
         data = json.loads(body)
 
-        name = data.get("name")
-        email = data.get("email")
-        pwd = data.get("password")
-        lib_code = data.get("lib_code")
-
+        updated_user = {}
         user = users_collection.find_one({"_id": ObjectId(data.get("id"))})
+        data.pop("id")
 
-        if user and name and email and pwd and lib_code:
-            if email != user.get("email"):
-                invalid_email = users_collection.find_one({"email": email})
-                if invalid_email:
-                    return JsonResponse({"error": "New email has been used"}, status=409)
-            data.pop("id")
-            data["pwd"] = data.pop("password")
+        if user:
+            # and name and email and pwd and lib_code
+            if not data.get("name"):
+                data["name"] = user.get("name")
+            if not data.get("password"):
+                data["pwd"] = user.get("pwd")
+            else:
+                data["pwd"] = data.pop("password")
+            if not data.get("lib_code"):
+                data["lib_code"] = user.get("lib_code")
+            if not data.get("phone_num"):
+                data["phone_num"] = user.get("phone_num")
+            if not data.get("avatar"):
+                data["avatar"] = user.get("avatar")
+            if not data.get("email"):
+                data["email"] = user.get("email")
+            else: 
+                email = data.get("email")
+                if email != user.get("email"):
+                    invalid_email = users_collection.find_one({"email": email})
+                    if invalid_email:
+                        return JsonResponse({"error": "New email has been used"}, status=409)
             change = {"$set": data}
             result = users_collection.update_one(user, change)
             
             if result:
                 return JsonResponse({"message": "Updated successfully"})
 		
-        return JsonResponse({"error": "Invalid required fields"}, status=404)
+        return JsonResponse({"error": "Invalid user id"}, status=404)
 
     return JsonResponse({"error": "Invalid request method"}, status=405)
 
