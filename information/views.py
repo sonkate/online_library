@@ -121,7 +121,7 @@ def place_book(request):
             
         # case this book was returned
         if borrowed_book is not None and borrowed_book['status'] == 'returned':
-            borrowed_books.update_one({"_id": borrowed_book["_id"]}, { "$set": { "status": "borrowing" } })
+            borrowed_books.update_one({"_id": borrowed_book["_id"]}, { "$set": { "status": "borrowing","due_date": due_date_iso_format, "start_date": datetime.now().isoformat(),  } })
             # update number of book available
             books_collection.update_one({"_id": ObjectId(bookId)}, {'$inc': {'available': -1}})
             return JsonResponse({'message': 'Book placed successfully'}, status=200)
@@ -180,6 +180,53 @@ def get_book(request):
         response = {"data": data_res, "message": "successful"}
         return JsonResponse(response, status=200)
     return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+def get_placed_list(request, id):
+    if request.method == "GET":
+        # case: check valid userId
+        if not ObjectId.is_valid(id):
+            return JsonResponse({'error': 'Wrong Id'}, status=409)
+        user = users_collection.find_one({"_id" : ObjectId(id)})
+
+        # case: check existed user
+        if user:
+            data = borrowed_books.find({"userId" : id})
+            placed_books = json.loads(json_util.dumps(data))
+
+            # case: no book borrowed before
+            if len(list(placed_books))==0:
+                return JsonResponse({'data': '' ,'message': 'Placed list is empty'}, status=200)
+            
+            # case: normal list
+            data = books_collection.find({"$or": [{'_id': ObjectId(item['bookId'])} for item in placed_books]})
+            matching_books = json.loads(json_util.dumps(data))
+            for book in matching_books:
+                book['id'] = str(book['_id']['$oid'])
+                del book['_id']
+
+            combined_list = []
+            for item in placed_books:
+                book_id = item['bookId']
+                matching_book = next((book for book in matching_books if book['id'] == book_id), None)
+                if matching_book:
+                    del item['userId']
+                    del item['_id']
+                    del item['bookId']
+                    item.update(matching_book)
+                    combined_list.append(item)
+            data = [item for item in combined_list if item['status'] == 'borrowing']
+
+            #check final length of data after being eliminated 
+            if len(data) == 0:
+                return JsonResponse({'data': '' ,'message': 'Placed list is empty'}, status=200)
+            return JsonResponse({'data': data ,'message': 'success'}, status=200)
+
+        else:
+            return JsonResponse({'error': 'User id is not exist'}, status=409)
+    else:
+        return JsonResponse({'error': 'Invalid request method'}, status=405)
+            
+
 def get_wishlist(request, id):
     if request.method == "GET":
         if not ObjectId.is_valid(id):
@@ -275,27 +322,39 @@ def update_user_info(request):
         body = request.body.decode("utf-8")
         data = json.loads(body)
 
-        name = data.get("name")
-        email = data.get("email")
-        pwd = data.get("password")
-        lib_code = data.get("lib_code")
-
+        updated_user = {}
         user = users_collection.find_one({"_id": ObjectId(data.get("id"))})
+        data.pop("id")
 
-        if user and name and email and pwd and lib_code:
-            if email != user.get("email"):
-                invalid_email = users_collection.find_one({"email": email})
-                if invalid_email:
-                    return JsonResponse({"error": "New email has been used"}, status=409)
-            data.pop("id")
-            data["pwd"] = data.pop("password")
+        if user:
+            # and name and email and pwd and lib_code
+            if not data.get("name"):
+                data["name"] = user.get("name")
+            if not data.get("password"):
+                data["pwd"] = user.get("pwd")
+            else:
+                data["pwd"] = data.pop("password")
+            if not data.get("lib_code"):
+                data["lib_code"] = user.get("lib_code")
+            if not data.get("phone_num"):
+                data["phone_num"] = user.get("phone_num")
+            if not data.get("avatar"):
+                data["avatar"] = user.get("avatar")
+            if not data.get("email"):
+                data["email"] = user.get("email")
+            else: 
+                email = data.get("email")
+                if email != user.get("email"):
+                    invalid_email = users_collection.find_one({"email": email})
+                    if invalid_email:
+                        return JsonResponse({"error": "New email has been used"}, status=409)
             change = {"$set": data}
             result = users_collection.update_one(user, change)
             
             if result:
                 return JsonResponse({"message": "Updated successfully"})
 		
-        return JsonResponse({"error": "Invalid required fields"}, status=404)
+        return JsonResponse({"error": "Invalid user id"}, status=404)
 
     return JsonResponse({"error": "Invalid request method"}, status=405)
 
